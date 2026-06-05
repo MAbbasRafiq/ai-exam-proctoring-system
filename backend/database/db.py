@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 #   postgresql://USERNAME:PASSWORD@HOST/DATABASE_NAME
 # Change this to match your local PostgreSQL setup.
 # ---------------------------------------------------------------
-DATABASE_URL = "postgresql://postgres:A77372184@localhost/exam_system"
+DATABASE_URL = "postgresql://postgres:YourPassword@localhost/exam_system"
 
 # Create the database engine (the actual connection handler)
 engine = create_engine(DATABASE_URL)
