@@ -31,6 +31,7 @@ function Exam() {
   const [correctAnswers, setCorrectAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);      // prevent double submit
   const [timeLeft, setTimeLeft] = useState(600);          // 10 minutes = 600 seconds
+  const [examStarted, setExamStarted] = useState(false);  // exam hasn't started until user clicks Start
 
   // -------------------------------------------------------
   // State for AI monitoring
@@ -70,24 +71,26 @@ function Exam() {
   }, []);
 
   // -------------------------------------------------------
-  // Start the webcam when the page loads
+  // Start the webcam when the exam starts
   // -------------------------------------------------------
   useEffect(() => {
+    if (!examStarted) return;  // Don't start webcam until exam begins
+
     startWebcam();
 
     // Cleanup: stop the webcam when user leaves this page
     return () => {
       stopWebcam();
     };
-  }, []);
+  }, [examStarted]);
 
   // -------------------------------------------------------
   // Countdown timer
   // Decreases by 1 every second. Auto-submits when it hits 0.
   // -------------------------------------------------------
   useEffect(() => {
-    // Don't run if exam is done or time is up
-    if (submitted || timeLeft <= 0) return;
+    // Don't run if exam hasn't started, is done, or time is up
+    if (!examStarted || submitted || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft(function(prev) {
@@ -97,7 +100,7 @@ function Exam() {
 
     // Clear the timer when component unmounts or dependencies change
     return () => clearInterval(timer);
-  }, [submitted, timeLeft]);
+  }, [examStarted, submitted, timeLeft]);
 
   // Auto-submit when timer reaches 0
   useEffect(() => {
@@ -110,15 +113,15 @@ function Exam() {
   // Run AI monitoring check every 3 seconds
   // -------------------------------------------------------
   useEffect(() => {
-    // Don't monitor after exam is submitted
-    if (submitted) return;
+    // Don't monitor if exam hasn't started or after exam is submitted
+    if (!examStarted || submitted) return;
 
     const monitoringInterval = setInterval(() => {
       runMonitoringCheck();
     }, 3000);  // check every 3 seconds
 
     return () => clearInterval(monitoringInterval);
-  }, [submitted]);
+  }, [examStarted, submitted]);
 
   // -------------------------------------------------------
   // Fetch violations list every 10 seconds (for the panel)
@@ -298,6 +301,15 @@ function Exam() {
     window.location.href = "/login";
   }
 
+  // =======================================================
+  // FUNCTION: handleStartExam
+  // Called when user clicks the "Start Exam" button.
+  // Begins the exam: timer starts, monitoring begins.
+  // =======================================================
+  function handleStartExam() {
+    setExamStarted(true);
+  }
+
 
   // =======================================================
   // Helper: Format seconds into MM:SS display
@@ -328,88 +340,117 @@ function Exam() {
         </button>
       </div>
 
-      {/* Main layout: 2 columns */}
-      {/* Left column = exam questions (wider), Right column = monitoring panel */}
-      <div className="flex gap-6">
-
-        {/* ============================================
-            LEFT COLUMN: Webcam + Questions / Result
-        ============================================ */}
-        <div className="flex-1">
-
-          {/* Webcam video feed (small, at the top) */}
-          <div className="mb-4">
-            {cameraError ? (
-              // Show error message if camera failed
-              <p className="text-red-500 text-sm">{cameraError}</p>
-            ) : (
-              <div>
-                <p className="text-sm text-gray-500 mb-1">📷 Webcam (AI Monitoring Active)</p>
-                {/* Video element - shows live webcam feed */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  className="w-48 h-36 border rounded object-cover"
-                />
-                {/* Hidden canvas used only to capture frames for analysis */}
-                <canvas ref={canvasRef} className="hidden" />
-              </div>
-            )}
-          </div>
-
-          {/* Show exam questions OR result based on submission status */}
-          {score === null ? (
-            // ---- EXAM IN PROGRESS ----
-            <div>
-              {/* Timer display — turns red when under 30 seconds */}
-              <h2 className={`text-xl font-bold mb-4 ${timeLeft < 30 ? "text-red-600" : ""}`}>
-                ⏱ Time Left: {formatTime(timeLeft)}
-              </h2>
-
-              {/* List all questions */}
-              {questions.map(function(q) {
-                return (
-                  <QuestionCard
-                    key={q.id}
-                    question={q}
-                    selected={answers[q.id]}   // pass what user selected for this question
-                    onSelect={handleSelect}
-                    disabled={false}           // questions are clickable during exam
-                  />
-                );
-              })}
-
-              {/* Submit button */}
-              <button
-                onClick={handleSubmit}
-                className="mt-4 mb-8 bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600"
-              >
-                Submit Exam
-              </button>
+      {/* If exam hasn't started, show welcome screen with Start button */}
+      {!examStarted ? (
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center max-w-2xl">
+            <h2 className="text-4xl font-bold mb-6">Welcome to the Exam</h2>
+            <div className="bg-blue-50 border border-blue-300 rounded-lg p-8 mb-8">
+              <p className="text-lg text-gray-700 mb-4">
+                Please make sure you are in a quiet environment and have your camera and microphone ready.
+              </p>
+              <p className="text-lg text-gray-700 mb-4">
+                You will have <span className="font-bold">10 minutes</span> to complete this exam.
+              </p>
+              <p className="text-lg text-gray-700">
+                The exam has AI monitoring enabled to ensure exam integrity.
+              </p>
             </div>
-          ) : (
-            // ---- EXAM SUBMITTED: Show result ----
-            <Result
-              questions={questions}
-              answers={answers}
-              correctAnswers={correctAnswers}
-              score={score}
-            />
-          )}
+            <button
+              onClick={handleStartExam}
+              className="bg-green-500 text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-green-600"
+            >
+              Start Exam
+            </button>
+          </div>
         </div>
+      ) : (
+        // Exam has started - show exam questions and monitoring panel
+        <>
+          {/* Main layout: 2 columns */}
+          {/* Left column = exam questions (wider), Right column = monitoring panel */}
+          <div className="flex gap-6">
 
-        {/* ============================================
-            RIGHT COLUMN: AI Monitoring Panel
-        ============================================ */}
-        <div className="w-72">
-          <MonitoringPanel
-            alerts={alerts}
-            violations={violations}
-          />
-        </div>
+            {/* ============================================
+                LEFT COLUMN: Webcam + Questions / Result
+            ============================================ */}
+            <div className="flex-1">
 
-      </div>
+              {/* Webcam video feed (small, at the top) */}
+              <div className="mb-4">
+                {cameraError ? (
+                  // Show error message if camera failed
+                  <p className="text-red-500 text-sm">{cameraError}</p>
+                ) : (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">📷 Webcam (AI Monitoring Active)</p>
+                    {/* Video element - shows live webcam feed */}
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      className="w-48 h-36 border rounded object-cover"
+                    />
+                    {/* Hidden canvas used only to capture frames for analysis */}
+                    <canvas ref={canvasRef} className="hidden" />
+                  </div>
+                )}
+              </div>
+
+              {/* Show exam questions OR result based on submission status */}
+              {score === null ? (
+                // ---- EXAM IN PROGRESS ----
+                <div>
+                  {/* Timer display — turns red when under 30 seconds */}
+                  <h2 className={`text-xl font-bold mb-4 ${timeLeft < 30 ? "text-red-600" : ""}`}>
+                    ⏱ Time Left: {formatTime(timeLeft)}
+                  </h2>
+
+                  {/* List all questions */}
+                  {questions.map(function(q) {
+                    return (
+                      <QuestionCard
+                        key={q.id}
+                        question={q}
+                        selected={answers[q.id]}   // pass what user selected for this question
+                        onSelect={handleSelect}
+                        disabled={false}           // questions are clickable during exam
+                      />
+                    );
+                  })}
+
+                  {/* Submit button */}
+                  <button
+                    onClick={handleSubmit}
+                    className="mt-4 mb-8 bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600"
+                  >
+                    Submit Exam
+                  </button>
+                </div>
+              ) : (
+                // ---- EXAM SUBMITTED: Show result ----
+                <Result
+                  questions={questions}
+                  answers={answers}
+                  correctAnswers={correctAnswers}
+                  score={score}
+                />
+              )}
+                </div>
+
+            {/* ============================================
+                RIGHT COLUMN: AI Monitoring Panel
+            ============================================ */}
+            <div className="w-72">
+              <MonitoringPanel
+                alerts={alerts}
+                violations={violations}
+              />
+            </div>
+
+          </div>
+        </>
+      )}
     </div>
   );
 }
